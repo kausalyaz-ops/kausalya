@@ -19,15 +19,20 @@ class DataAnalyzer:
             enriched.groupby(["department_code", "department"], dropna=False)
             .agg(
                 record_count=("record_id", "count"),
-                avg_salary=("salary", "mean"),
                 median_salary=("salary", "median"),
                 max_salary=("salary", "max"),
                 total_salary=("salary", "sum"),
-                avg_hours=("hours", "mean"),
                 total_overtime=("overtime", "sum"),
                 salary_budget=("salary_budget", "first"),
             )
             .reset_index()
+        )
+        multi_metric_summary = self._aggregate_columns(enriched, "salary", "hours", "overtime")
+        by_department = by_department.merge(
+            multi_metric_summary,
+            on=["department_code", "department"],
+            how="left",
+            validate="one_to_one",
         )
         by_department["overtime_share"] = np.divide(
             by_department["total_overtime"],
@@ -106,6 +111,18 @@ class DataAnalyzer:
             "key_findings": self._findings(by_department, by_year, salary_mean, correlation),
             "recommendations": self._recommendations(quality, by_department, correlation),
         }
+
+    @staticmethod
+    def _aggregate_columns(frame: pd.DataFrame, *columns: str) -> pd.DataFrame:
+        """Calculate means for a variadic list of department-level metrics."""
+        aggregations = {
+            f"avg_{column}": (column, "mean") for column in columns if column in frame.columns
+        }
+        return (
+            frame.groupby(["department_code", "department"], dropna=False)
+            .agg(**aggregations)
+            .reset_index()
+        )
 
     @staticmethod
     def _merge_budget(frame: pd.DataFrame, rows: list[dict[str, Any]]) -> pd.DataFrame:

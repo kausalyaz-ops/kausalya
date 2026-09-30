@@ -32,15 +32,12 @@ def high_salary_records(
     if frame.empty or "salary" not in frame:
         return []
     cutoff = threshold if threshold is not None else float(frame["salary"].quantile(0.9))
-    records: list[dict[str, Any]] = []
-    for record in frame.to_dict(orient="records"):
-        salary = record.get("salary")
-        if pd.isna(salary) or salary < cutoff:
-            continue
-        if limit is not None and len(records) >= limit:
-            break
-        records.append(record)
-    return records
+    records = [
+        record
+        for record in frame.to_dict(orient="records")
+        if pd.notna(record.get("salary")) and record["salary"] >= cutoff
+    ]
+    return records if limit is None else records[: max(0, limit)]
 
 
 def sort_by_salary(frame: pd.DataFrame, descending: bool = True) -> pd.DataFrame:

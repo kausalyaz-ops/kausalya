@@ -41,19 +41,28 @@ class DataLoader:
         self.source_path.parent.mkdir(parents=True, exist_ok=True)
         params: dict[str, Any] = {"$select": SOURCE_FIELDS, "$limit": settings.DATA_LIMIT}
         headers = {"X-App-Token": settings.SOCRATA_APP_TOKEN} if settings.SOCRATA_APP_TOKEN else {}
-        try:
-            response = requests.get(
-                settings.EMPLOYEE_DATA_URL,
-                params=params,
-                headers=headers,
-                timeout=settings.REQUEST_TIMEOUT,
-            )
-            response.raise_for_status()
-            rows = response.json()
-        except requests.exceptions.Timeout as exc:
-            raise InvalidDatasetError("Timed out while downloading the public source dataset.") from exc
-        except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as exc:
-            raise InvalidDatasetError(f"Could not download a valid source dataset: {exc}") from exc
+        attempt = 0
+        while attempt < 2:
+            try:
+                response = requests.get(
+                    settings.EMPLOYEE_DATA_URL,
+                    params=params,
+                    headers=headers,
+                    timeout=settings.REQUEST_TIMEOUT,
+                )
+                response.raise_for_status()
+                rows = response.json()
+                break
+            except requests.exceptions.Timeout as exc:
+                attempt += 1
+                if attempt == 2:
+                    raise InvalidDatasetError(
+                        "Timed out twice while downloading the public source dataset."
+                    ) from exc
+                LOGGER.warning("Source request timed out; retrying once")
+                continue
+            except (requests.exceptions.RequestException, requests.exceptions.JSONDecodeError) as exc:
+                raise InvalidDatasetError(f"Could not download a valid source dataset: {exc}") from exc
         if not isinstance(rows, list) or not rows:
             raise InvalidDatasetError("The public source returned no compensation records.")
         frame = pd.DataFrame(rows)
