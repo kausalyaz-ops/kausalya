@@ -1,0 +1,1 @@
+"""Employee compensation analysis pipeline."""
